@@ -1,0 +1,381 @@
+#Carga las librerias necesarias para el script
+```{r Librerias, echo=TRUE, message=FALSE, warning=FALSE}
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(tidyverse, nortest, ggplot2,car,ggpubr,rstatix)
+
+```
+install.packages('rstatix')
+
+# Lee los datos ordenados
+```{r Cargando_datos, echo=TRUE, message=FALSE, warning=FALSE}
+media_grupo_1_repeat_congruent <- 1005760542
+media_grupo_1_repeat_incongruent <- 9801470719
+media_grupo_1_mixing_repeat <- 9929538071
+media_grupo_1_switch_congruent <- 1447280769
+media_grupo_1_switch_incongruent <- 1341485363
+media_grupo_1_mixing_switch <- 1394383066
+media_grupo_1_mixing_general <- 1193668437
+media_grupo_1_pure_congruent <- 7205732078
+media_grupo_1_pure_incongruent <- 7003612001
+media_grupo_1_pure <- 710467204
+
+media_grupo_2_repeat_congruent <- 1071072508
+media_grupo_2_repeat_incongruent <- 1136917636
+media_grupo_2_mixing_repeat <- 1103995072
+media_grupo_2_switch_congruent <- 1154865055
+media_grupo_2_switch_incongruent <- 1271610714
+media_grupo_2_mixing_switch <- 1213237885
+media_grupo_2_mixing_general <- 1158616478
+media_grupo_2_pure_congruent <- 7461719319
+media_grupo_2_pure_incongruent <- 705117066
+media_grupo_2_pure <- 725644499
+
+
+BD_1 <- read.csv(file = "copia grupo 1 - grupo 1.csv")
+BD_2 <- read.csv(file = "copia grupo 2 - grupo 2.csv")
+str(BD_1)
+str(BD_2)
+``` 
+
+```{r Borrando_nas, echo=TRUE}
+BD_1 <- na.omit(BD_1)
+BD_1
+BD_2 <- na.omit(BD_2)
+BD_2
+```
+
+BD <- merge(x= BD_1, y= BD_2, all= TRUE)
+BD
+
+```{r Descriptivos, echo=TRUE, message=FALSE, warning=FALSE}
+BD %>% group_by(Grupo) %>% summarise(
+  media= mean(Tiempo.de.Cuidado),
+  mediana= median(Tiempo.de.Cuidado),
+  ds= sd(Tiempo.de.Cuidado),
+  varianza= var(Tiempo.de.Cuidado),
+  minimo= min(Tiempo.de.Cuidado),
+  maximo= max(Tiempo.de.Cuidado),
+  muestra= n(),
+  error_estandar=ds/sqrt(muestra),
+  i_confianza_low= media-2*error_estandar,
+  i_confianza_up= media+2*error_estandar
+) %>% na.omit()
+```
+
+```{r Borrando_nas, echo=TRUE}
+BD<- na.omit(BD)
+BD
+```
+
+# Comprobación de los supuestos de normalidad y homogeneidad de varianzas -----------
+## Normalidad de cada grupo -----------
+    # Prueba de hipótesis: Kolmogorov Smirnov con modificación de Lilliefors
+    lillie.test(BD$Tiempo.de.Cuidado..hrs.[BD$Grupo== 1]) 
+    lillie.test(BD$Tiempo.de.Cuidado..hrs.[BD$Grupo== 2])
+    #no usamos lilliefors porque la muestra del grupo 1 es 4.
+    
+```{r prueba_normalidad, echo=TRUE, message=FALSE, warning=FALSE}
+shapiro.test(BD$Tiempo.de.Cuidado[BD$Grupo==1]) 
+shapiro.test(BD$Tiempo.de.Cuidado[BD$Grupo==2]) 
+
+```
+
+Visualización
+    ggplot(BD, aes(x=Tiempo.de.Cuidado, color=Grupo)) +
+      geom_density() +
+      scale_color_manual(values = c("#42D9C8","#D63230"))+
+      theme_minimal()+
+      labs(title = 'Distribución por Grupo de madre.',
+           color = 'Grupo',
+           x = 'Tiempo de Cuidado', 
+           y='Densidad',
+           caption="Prueba de Shapiro-Wilk:
+           Grupo 1: p= 0.001241
+           Grupo 2: p=0.901")
+## Homogeneidad de varianzas/Homocedasticidad ---------------
+bartlett.test(BD$Tiempo.de.Cuidado~BD$Grupo)
+#Visualización
+ggplot(data = BD, aes(x =as.character(Grupo), y = Tiempo.de.Cuidado, colour = Grupo)) +
+      geom_boxplot() +
+      labs(title = 'Tiempo de Cuidado por grupo de madre.',
+           x = 'Grupo de Madres',
+           y = 'Tiempo de Cuidado',
+           caption = "Tiempo de Cuidado medido por PHQ-9 
+           Test de Barlett: p=0.007952") +
+      theme_bw() +
+      theme(legend.position='none')
+#U-Mann
+```{r}
+coin::wilcox_test(Tiempo.de.Cuidado ~ as.factor(Grupo), data = BD, distribution = "exact", conf.int=0.95)
+
+```
+```{r tamanio_efecto, echo=TRUE, message=FALSE, warning=FALSE}
+effsize::cohen.d(formula=Tiempo.de.Cuidado~Grupo, data=BD, paired=F)
+```
+
+```{r Boxplot_dep, echo=TRUE, message=FALSE, warning=FALSE}
+ggplot(data = BD, aes(x =as.character(Grupo), y = Tiempo.de.Cuidado, colour = Grupo)) + geom_boxplot() +
+      labs(title = 'Tiempo de Cuidado por grupo de madre.',
+           x = 'Grupo de Madres',
+           y = 'Tiempo de Cuidado') + geom_label(label="Mann-Whithney, p=0.03175",x=1,y=7,label.size=0.0008)+
+      theme_bw() +
+      theme(legend.position='none')
+```
+
+    
+
+#Normalidad tiempos
+```{r}
+BD %>%
+  group_by(Grupo) %>%
+  shapiro_test(M_R_Congruent, M_R_Incongruent, M_S_Congruent, M_S_Incongruent, Pure_Congruent, Pure_Incongruent)
+```
+```{r}
+bartlett.test(BD$M_S_Incongruent~BD$Grupo)
+bartlett.test(BD$M_S_Congruent~BD$Grupo)
+```
+
+#ANOVA FActorial
+```{r}
+BDgud <- read.csv(file = "time_mamis1.csv")
+BDgud
+```
+```{r}
+
+BDgud$Congruencia[BDgud$Congruencia=="congruent"]<-"congruente"
+BDgud$Congruencia[BDgud$Congruencia=="incongruent"]<-"incongruente"
+BDgud$Grupo[BDgud$Grupo=="1"]<-"Sin horario laboral fijo"
+BDgud$Grupo[BDgud$Grupo=="2"]<-"Con horario laboral fijo"
+BDgud$Bloque[BDgud$Bloque=="Both"]<-"Puro"
+BDgud$Bloque[BDgud$Bloque=="Repeat"]<-"Repetición"
+BDgud$Bloque[BDgud$Bloque=="Switch"]<-"Alterno"
+BDgud <- cbind(ID=1:nrow(BDgud),BDgud)
+BDgud <- BDgud %>% convert_as_factor(Bloque,ID, Congruencia, Grupo)
+BDgud <- BDgud%>% select (-X)
+
+BDgud
+
+```
+values <-sapply(lapply(BDgud,unique), length)
+values
+lapply(BDgud[c('Bloque', 'ID','Tiempo' 'Congruencia','Grupo')], unique)
+```{r}
+res.aov <- anova_test(
+  data = BDgud, dv = Tiempo, wid = ID,
+  within = Bloque, between = c(Congruencia, Grupo)
+  )
+get_anova_table(res.aov)
+```
+```{r}
+anova_ma <- BDgud %>%
+  group_by(Bloque) %>%
+  anova_test(dv = Tiempo, wid = ID, between = c(Congruencia, Grupo))
+anova_ma
+
+```
+```{r}
+stress.effect <- BDgud %>%
+  group_by(Bloque, Congruencia) %>%
+  anova_test(dv = Tiempo, wid = ID, between = Grupo)
+stress.effect 
+```
+```{r}
+pwc <- BDgud %>%
+  group_by(Bloque, Congruencia) %>%
+  pairwise_t_test(Tiempo ~ Grupo, p.adjust.method = "bonferroni") %>%
+  select(-p, -p.signif) # Remove details
+# Focus on the results of "female" at t2
+pwc 
+```
+
+```{r}
+BDgudAl<-BDgud[which(BDgud$Bloque=='Alterno'),]
+BDgudAl
+bxpAl <- ggboxplot(BDgudAl, x = "Congruencia",y = "Tiempo",color = "Grupo",
+  palette = c("#937DC2","#E9C2F2")) 
+bxpAl<- bxpAl + labs(x='Alterno', y='Tiempo de respuesta
+[ms]') + scale_y_continuous(breaks=seq(0, 2000, 200))
+
+bxpAl
+
+```
+```{r}
+BDgud2 <- read.csv(file = "time_mamis2.csv")
+BDgud2
+```
+```{r}
+BDgud2<-na.omit(BDgud2)
+BDgud2$Congruencia[BDgud2$Congruencia=="congruent"]<-"c"
+BDgud2$Congruencia[BDgud2$Congruencia=="incongruent"]<-"i"
+
+BDgud2$Grupo[BDgud2$Grupo=="1"]<-"Sin horario laboral fijo"
+BDgud2$Grupo[BDgud2$Grupo=="2"]<-"Con horario laboral fijo"
+BDgud2$Bloque[BDgud2$Bloque=="Both"]<-"Puro"
+BDgud2$Bloque[BDgud2$Bloque=="Repeat"]<-"Repetición"
+BDgud2$Bloque[BDgud2$Bloque=="Switch"]<-"Alterno"
+BDgud2 <- cbind(ID=1:nrow(BDgud2),BDgud2)
+BDgud2 <- BDgud2 %>% convert_as_factor(Bloque,ID, Congruencia, Grupo)
+BDgud2 <- BDgud2%>% select (-X)
+
+
+BDgud2
+
+```
+
+```{r}
+anova_ma <- BDgud2 %>%
+  group_by(Bloque) %>%
+  anova_test(dv = Tiempo, wid = ID, between = c(Congruencia, Grupo))
+anova_ma
+
+```
+```{r}
+stress.effect <- BDgud2 %>%
+  group_by(Bloque, Congruencia) %>%
+  anova_test(dv = Tiempo, wid = ID, between = Grupo)
+stress.effect 
+```
+```{r}
+bxp <- ggboxplot(BDgud2, x = "Congruencia",y = "Tiempo",color = "Grupo", facet.by =  "Bloque",
+  palette = c("#937DC2","#E9C2F2")) 
+bxp
+```
+#Correlation
+```{r}
+switch_mamis <- read.csv(file = "correlation_mamis.csv")
+aciertosi <- read.csv(file = "aciertosi.csv")
+aciertosc <- read.csv(file = "aciertosc.csv")
+aciertosi<-aciertosi%>% select (-X)
+aciertosc<-aciertosc%>% select (-X)
+switch_mamis
+aciertosi
+```
+```{r}
+cor<-merge(x= BD[,1:3], y= switch_mamis, all= TRUE)
+cor<-merge(x= cor, y= aciertosi, all= TRUE)
+cor<-merge(x= cor, y= aciertosc, all= TRUE)
+cor$Grupo[cor$Grupo=="1"]<-"Sin horario laboral fijo"
+cor$Grupo[cor$Grupo=="2"]<-"Con horario laboral fijo"
+cor
+```
+```{r}
+#Tiempos de cuidado vs incongruentes/congruentes
+cor.test(cor$Tiempo.de.Cuidado[which(cor$Grupo=='Con horario laboral fijo')],cor$congruent[which(cor$Grupo=='Con horario laboral fijo')],method = "spearman",exact=FALSE)
+cor.test(cor$Tiempo.de.Cuidado[which(cor$Grupo=='Con horario laboral fijo')],cor$incongruent[which(cor$Grupo=='Con horario laboral fijo')],method = "spearman",exact=FALSE)
+```
+```{r}
+ggplot(cor, aes(x=Tiempo.de.Cuidado, y=congruent, color=Grupo)) + 
+    geom_point(size=4) +scale_color_manual(values=c("#937DC2","#E9C2F2"))+
+    labs(
+        color ="Grupo",
+        x="Tiempo de cuidado
+[hrs]",
+        y="Tiempo de respuesta
+(Alterno,congruente)
+[ms]"
+    )+
+    theme_minimal() + scale_y_continuous(breaks=seq(0, 2000, 200))
+```
+```{r}
+ggplot(cor, aes(x=Tiempo.de.Cuidado, y=incongruent, color=Grupo)) + 
+    geom_point(size=4) +scale_color_manual(values=c("#937DC2","#E9C2F2"))+
+    labs(
+        color ="Grupo",
+             x="Tiempo de cuidado
+[hrs]",
+        y="Tiempo de respuesta
+(Alterno,incongruente)
+[ms]"
+    )+
+    theme_minimal() + scale_y_continuous(breaks=seq(0, 2000, 200))
+```
+```{r}
+#Tiempos de cuidad vs porcentaje de aciertos incongruentes(Mamás con horario laboral fijo)
+cor.test(cor$Tiempo.de.Cuidado[which(cor$Grupo=='Con horario laboral fijo')],cor$Porcentaje.de.aciertos.incongruentes[which(cor$Grupo=='Con horario laboral fijo')],method = "spearman",exact=FALSE)
+cor.test(cor$Tiempo.de.Cuidado[which(cor$Grupo=='Con horario laboral fijo')],cor$Porcentaje.de.aciertos.congruentes[which(cor$Grupo=='Con horario laboral fijo')],method = "spearman",exact=FALSE)
+```
+```{r}
+ggplot(cor, aes(x=Tiempo.de.Cuidado, y=Porcentaje.de.aciertos.incongruentes, color=Grupo)) + 
+    geom_point(size=4) +scale_color_manual(values=c("#937DC2","#E9C2F2"))+
+    labs(
+        color ="Grupo",
+        x="Tiempo de cuidado
+[hrs]",
+        y="Porcentaje de aciertos
+(Alterno,incongruente)
+[%]"
+    )+
+    theme_minimal()
+```
+```{r}
+ggplot(cor, aes(x=Tiempo.de.Cuidado, y=Porcentaje.de.aciertos.congruentes, color=Grupo)) + 
+    geom_point(size=4) +scale_color_manual(values=c("#937DC2","#E9C2F2"))+
+    labs(
+        color ="Grupo",
+        x="Tiempo de cuidado
+[hrs]",
+        y="Porcentaje de aciertos
+(Alterno,congruente)
+[%]"
+    )+
+    theme_minimal() 
+```
+
+```{r}
+#Tiempos de cuidado vs porcentaje de aciertos incongruentes(Todas las mamás)
+cor.test(cor$incongruent,cor$Porcentaje.de.aciertos.incongruentes,method = "spearman",exact=FALSE)
+
+#Tiempos de cuidad vs porcentaje de aciertos incongruentes(Mamás con horario laboral fijo)
+cor.test(cor$incongruent[which(cor$Grupo=='Con horario laboral fijo')],cor$Porcentaje.de.aciertos.incongruentes[which(cor$Grupo=='Con horario laboral fijo')],method = "spearman",exact=FALSE)
+```
+```{r}
+ggplot(cor, aes(x=incongruent, y=Porcentaje.de.aciertos.incongruentes, color=Grupo)) + 
+    geom_point(size=4) +scale_color_manual(values=c("#937DC2","#E9C2F2"))+
+    labs(
+        color ="Grupo",
+        x="Tiempo de cuidado",
+        y="Tiempo de respuesta
+(Alterno,congruente)"
+    )+
+    theme_minimal()
+```
+```{r}
+anova_test(dv = Porcentaje.de.aciertos.incongruentes, wid = Sujetos, between = Grupo, data=cor)
+```
+```{r}
+shapiro.test(cor$Porcentaje.de.aciertos.incongruentes) 
+car::leveneTest(y=cor$Porcentaje.de.aciertos.incongruentes, group = as.factor(cor$Grupo), center = median)
+pairwise_t_test(Porcentaje.de.aciertos.incongruentes ~ Grupo, p.adjust.method = "bonferroni", data=cor) %>%
+  select(-p, -p.signif) 
+wilcox.test(Porcentaje.de.aciertos.incongruentes ~ Grupo, data = cor,
+                   exact = FALSE)
+wilcox.test(Porcentaje.de.aciertos.congruentes ~ Grupo, data = cor,
+                   exact = FALSE)
+```
+```{r}
+cornew <- cor %>%
+  gather(key = "Congruencia", value = "Porcentaje", Porcentaje.de.aciertos.congruentes, Porcentaje.de.aciertos.incongruentes) 
+cornew$Congruencia[cornew$Congruencia=="Porcentaje.de.aciertos.congruentes"]<-"congruente"
+cornew$Congruencia[cornew$Congruencia=="Porcentaje.de.aciertos.incongruentes"]<-"incongruente"
+cornew
+```
+```{r}
+bxpPi <- ggboxplot(cor, x = "Grupo",y = "Porcentaje.de.aciertos.incongruentes",color="Grupo",
+  palette = c("#E9C2F2","#937DC2")) 
+bxpPi
+```
+```{r}
+bxpPc <- ggboxplot(cor, x = "Grupo",y = "Porcentaje.de.aciertos.congruentes", color="Grupo",palette = c("#E9C2F2","#937DC2")) 
+bxpPc 
+```
+```{r}
+bxpP <- ggboxplot(cornew, x = "Congruencia",y = "Porcentaje",color="Grupo",
+  palette = c("#937DC2","#E9C2F2")) 
+bxpP<- bxpP + labs(x='Alterno', y='Porcentaje de aciertos
+[%]') + scale_y_continuous(breaks=seq(0, 100, 20))
+bxpP
+```
+```{r}
+car::leveneTest(y=cor$Tiempo.de.Cuidado, group = as.factor(cor$Grupo), center = median)
+
+```

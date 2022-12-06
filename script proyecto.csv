@@ -1,0 +1,128 @@
+#Carga las librerias necesarias para el script
+```{r Librerias, echo=TRUE, message=FALSE, warning=FALSE}
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(tidyverse, nortest, ggplot2,car)
+```
+
+# Lee los datos ordenados
+```{r Cargando_datos, echo=TRUE, message=FALSE, warning=FALSE}
+media_grupo_1_repeat_congruent <- 1005760542
+media_grupo_1_repeat_incongruent <- 9801470719
+media_grupo_1_mixing_repeat <- 9929538071
+media_grupo_1_switch_congruent <- 1447280769
+media_grupo_1_switch_incongruent <- 1341485363
+media_grupo_1_mixing_switch <- 1394383066
+media_grupo_1_mixing_general <- 1193668437
+media_grupo_1_pure_congruent <- 7205732078
+media_grupo_1_pure_incongruent <- 7003612001
+media_grupo_1_pure <- 710467204
+
+media_grupo_2_repeat_congruent <- 1071072508
+media_grupo_2_repeat_incongruent <- 1136917636
+media_grupo_2_mixing_repeat <- 1103995072
+media_grupo_2_switch_congruent <- 1154865055
+media_grupo_2_switch_incongruent <- 1271610714
+media_grupo_2_mixing_switch <- 1213237885
+media_grupo_2_mixing_general <- 1158616478
+media_grupo_2_pure_congruent <- 7461719319
+media_grupo_2_pure_incongruent <- 705117066
+media_grupo_2_pure <- 725644499
+
+
+BD_1 <- read.csv(file = "../copia grupo 1 - grupo 1.csv")
+BD_2 <- read.csv(file = "../copia grupo 2 - grupo 2.csv")
+str(BD_1)
+str(BD_2)
+``` 
+
+```{r Borrando_nas, echo=TRUE}
+BD_1 <- na.omit(BD_1)
+BD_1
+BD_2 <- na.omit(BD_2)
+BD_2
+```
+
+BD <- merge(x= BD_1, y= BD_2, all= TRUE)
+BD
+
+```{r Descriptivos, echo=TRUE, message=FALSE, warning=FALSE}
+BD %>% group_by(Grupo) %>% summarise(
+  media= mean(Tiempo.de.Cuidado),
+  mediana= median(Tiempo.de.Cuidado),
+  ds= sd(Tiempo.de.Cuidado),
+  varianza= var(Tiempo.de.Cuidado),
+  minimo= min(Tiempo.de.Cuidado),
+  maximo= max(Tiempo.de.Cuidado),
+  muestra= n(),
+  error_estandar=ds/sqrt(muestra),
+  i_confianza_low= media-2*error_estandar,
+  i_confianza_up= media+2*error_estandar
+) %>% na.omit()
+```
+
+```{r Borrando_nas, echo=TRUE}
+BD<- na.omit(BD)
+BD
+```
+
+# Comprobación de los supuestos de normalidad y homogeneidad de varianzas -----------
+## Normalidad de cada grupo -----------
+    # Prueba de hipótesis: Kolmogorov Smirnov con modificación de Lilliefors
+    lillie.test(BD$Tiempo.de.Cuidado..hrs.[BD$Grupo== 1]) 
+    lillie.test(BD$Tiempo.de.Cuidado..hrs.[BD$Grupo== 2])
+    #no usamos lilliefors porque la muestra del grupo 1 es 4.
+    
+```{r prueba_normalidad, echo=TRUE, message=FALSE, warning=FALSE}
+shapiro.test(BD$Tiempo.de.Cuidado[BD$Grupo==1]) 
+shapiro.test(BD$Tiempo.de.Cuidado[BD$Grupo==2]) 
+```
+
+Visualización
+    ggplot(BD, aes(x=Tiempo.de.Cuidado, color=Grupo)) +
+      geom_density() +
+      scale_color_manual(values = c("#42D9C8","#D63230"))+
+      theme_minimal()+
+      labs(title = 'Distribución por Grupo de madre.',
+           color = 'Grupo',
+           x = 'Tiempo de Cuidado', 
+           y='Densidad',
+           caption="Prueba de Shapiro-Wilk:
+           Grupo 1: p= 0.001241
+           Grupo 2: p=0.901")
+## Homogeneidad de varianzas/Homocedasticidad ---------------
+    # Prueba de hipótesis: Barlett
+    bartlett.test(BD$Tiempo.de.Cuidado~BD$Grupo)
+    
+Visualización
+    ggplot(data = BD, aes(x = Grupo, y = Tiempo.de.Cuidado, colour = Grupo)) +
+      geom_boxplot() +
+      labs(title = 'Tiempo de Cuidado por grupo de madre.',
+           x = 'Grupo de Madres',
+           y = 'Tiempo de Cuidado',
+           caption = "Tiempo de Cuidado medido por PHQ-9
+           Test de Barlett: p=0.007952") +
+      theme_bw() +
+      theme(legend.position = "none")
+
+# Comparación entre grupos -----------------------------------
+    # Se guardan los datos de cada grupo en un vector
+    cuidado_g1 <- BD$Tiempo.de.Cuidado[BD$Grupo == 1]
+    cuidado_g2 <- BD$Tiempo.de.Cuidado[BD$Grupo == 2]
+    
+# Prueba de hipótesis:T de student
+    t.test(x=cuidado_g1, y=cuidado_g2, alternative = "two.sided", mu=0, var.equal = T, conf.level = 0.95)
+    
+# Tamaño del efecto: D de Cohen
+    effsize::cohen.d(formula=Tiempo.de.Cuidado~Grupo, data=BD, paired=FALSE)
+    
+# Visualización
+    ggplot(data = BD, aes(x = Grupo, y = Tiempo.de.Cuidado, colour = Grupo)) +
+      geom_boxplot() +
+      labs(title = 'Tiempo de Cuidado por grupo de madre.',
+           x = 'Grupo de Madres',
+           y = 'Tiempo de Cuidado',
+           caption = "Tiempo medido por PHQ-9") + #Agrega p-values comparando grupos
+      stat_compare_means(method = "t.test")+ 
+      theme_bw() +
+      theme(legend.position = "none")
+    
